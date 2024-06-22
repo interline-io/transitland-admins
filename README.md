@@ -7,7 +7,7 @@ This data is suitable for use with `github.com/interline-io/transitland-lib/tlxy
 # Timezones
 
 Timezone data from:
-- https://github.com/evansiroky/timezone-boundary-builder/releases/download/2024a/timezones-now.geojson.zip
+- https://github.com/evansiroky/timezone-boundary-builder/
 
 OSM license
 
