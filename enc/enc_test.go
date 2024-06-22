@@ -16,7 +16,7 @@ func testDecode(fn string) (geojson.FeatureCollection, error) {
 	if err != nil {
 		return fc, err
 	}
-	fc, err = polylineToGeojson(r)
+	fc, err = PolylineToGeojson(r)
 	if err != nil {
 		return fc, err
 	}
@@ -89,7 +89,7 @@ func BenchmarkDecodeTimezones(b *testing.B) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		rdata := bytes.NewReader(data)
-		fc, err := polylineToGeojson(rdata)
+		fc, err := PolylineToGeojson(rdata)
 		if err != nil {
 			b.Fatal(err)
 		}

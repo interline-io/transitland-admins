@@ -36,7 +36,7 @@ func CreateFromGeojson(fn string, outfn string, idKey string, keys ...string) er
 	if err := fc.UnmarshalJSON(fcData); err != nil {
 		return err
 	}
-	if err := geojsonToPolyline(fc, w, idKey, keys); err != nil {
+	if err := GeojsonToPolyline(fc, w, idKey, keys); err != nil {
 		return err
 	}
 	return nil
@@ -61,7 +61,7 @@ func CreateFromShapefile(fn string, outfn string, idKey string, keys ...string) 
 	fc := geojson.FeatureCollection{
 		Features: features,
 	}
-	return geojsonToPolyline(fc, w, idKey, keys)
+	return GeojsonToPolyline(fc, w, idKey, keys)
 }
 
 func CreateFromZipGeojson(fn string, outfn string, idKey string, keys ...string) error {
@@ -87,14 +87,14 @@ func CreateFromZipGeojson(fn string, outfn string, idKey string, keys ...string)
 		if err := fc.UnmarshalJSON(fcData); err != nil {
 			return err
 		}
-		if err := geojsonToPolyline(fc, w, idKey, keys); err != nil {
+		if err := GeojsonToPolyline(fc, w, idKey, keys); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func geojsonToPolyline(fc geojson.FeatureCollection, w io.Writer, idKey string, keys []string) error {
+func GeojsonToPolyline(fc geojson.FeatureCollection, w io.Writer, idKey string, keys []string) error {
 	codec := polyline.Codec{Dim: 2, Scale: polylineScale}
 	for i, feature := range fc.Features {
 		if i == 0 {
@@ -149,7 +149,7 @@ func geojsonToPolyline(fc geojson.FeatureCollection, w io.Writer, idKey string, 
 	return nil
 }
 
-func polylineToGeojson(r io.Reader) (geojson.FeatureCollection, error) {
+func PolylineToGeojson(r io.Reader) (geojson.FeatureCollection, error) {
 	codec := polyline.Codec{Dim: 2, Scale: polylineScale}
 	data, _ := ioutil.ReadAll(r)
 	var features []*geojson.Feature
