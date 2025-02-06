@@ -1,13 +1,13 @@
-package enc
+package main
 
 import (
 	"archive/zip"
-	"bufio"
-	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strings"
 
@@ -17,9 +17,66 @@ import (
 	"github.com/twpayne/go-shapefile"
 )
 
-// Space efficient encoding using polylines
+func main() {
+	idKey := ""
+	extraKeys := ""
+	flag.StringVar(&idKey, "idkey", "", "")
+	flag.StringVar(&extraKeys, "include", "", "Include this set of properties in output; comma separated")
+	flag.Parse()
+	fntype := flag.Arg(0)
+	infn := flag.Arg(1)
+	outfn := flag.Arg(2)
+	ek := strings.Split(extraKeys, ",")
+	if err := run(fntype, infn, outfn, idKey, ek); err != nil {
+		fmt.Println("failed:", err)
+		os.Exit(1)
+	}
+}
 
-const polylineScale = 1e6
+func run(fntype, infn, outfn, idKey string, ek []string) error {
+	if strings.HasPrefix(infn, "http") {
+		tmpf, err := os.CreateTemp("", "")
+		if err != nil {
+			return err
+		}
+		tmpf.Close()
+		tname := tmpf.Name()
+		defer os.Remove(tname)
+		if err := downloadFile(infn, tname); err != nil {
+			return err
+		}
+		infn = tname
+	}
+
+	fmt.Printf("Reading %s from %s, output: %s\n", fntype, infn, outfn)
+	var err error
+	if fntype == "geojson" {
+		err = CreateFromGeojson(infn, outfn, idKey, ek...)
+	} else if fntype == "zipgeojson" {
+		err = CreateFromZipGeojson(infn, outfn, idKey, ek...)
+	} else if fntype == "shapefile" {
+		err = CreateFromShapefile(infn, outfn, idKey, ek...)
+	} else {
+		return fmt.Errorf("unknown format: %s", fntype)
+	}
+	return err
+}
+
+func downloadFile(url string, filepath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
 
 func CreateFromGeojson(fn string, outfn string, idKey string, keys ...string) error {
 	w, _ := os.Create(outfn)
@@ -36,7 +93,7 @@ func CreateFromGeojson(fn string, outfn string, idKey string, keys ...string) er
 	if err := fc.UnmarshalJSON(fcData); err != nil {
 		return err
 	}
-	if err := GeojsonToPolyline(fc, w, idKey, keys); err != nil {
+	if err := GeojsonToPolylines(fc, w, idKey, keys); err != nil {
 		return err
 	}
 	return nil
@@ -61,7 +118,7 @@ func CreateFromShapefile(fn string, outfn string, idKey string, keys ...string) 
 	fc := geojson.FeatureCollection{
 		Features: features,
 	}
-	return GeojsonToPolyline(fc, w, idKey, keys)
+	return GeojsonToPolylines(fc, w, idKey, keys)
 }
 
 func CreateFromZipGeojson(fn string, outfn string, idKey string, keys ...string) error {
@@ -87,14 +144,17 @@ func CreateFromZipGeojson(fn string, outfn string, idKey string, keys ...string)
 		if err := fc.UnmarshalJSON(fcData); err != nil {
 			return err
 		}
-		if err := GeojsonToPolyline(fc, w, idKey, keys); err != nil {
+		if err := GeojsonToPolylines(fc, w, idKey, keys); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func GeojsonToPolyline(fc geojson.FeatureCollection, w io.Writer, idKey string, keys []string) error {
+// Copied frmo tlxy
+const polylineScale = 1e6
+
+func GeojsonToPolylines(fc geojson.FeatureCollection, w io.Writer, idKey string, keys []string) error {
 	codec := polyline.Codec{Dim: 2, Scale: polylineScale}
 	for i, feature := range fc.Features {
 		if i == 0 {
@@ -147,46 +207,4 @@ func GeojsonToPolyline(fc geojson.FeatureCollection, w io.Writer, idKey string, 
 		}
 	}
 	return nil
-}
-
-func PolylineToGeojson(r io.Reader) (geojson.FeatureCollection, error) {
-	codec := polyline.Codec{Dim: 2, Scale: polylineScale}
-	data, _ := ioutil.ReadAll(r)
-	var features []*geojson.Feature
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(nil, 1024*1024)
-	scanner.Split(bufio.ScanLines)
-	for scanner.Scan() {
-		sp := bytes.Split(scanner.Bytes(), []byte("\t"))
-		if len(sp) < 2 {
-			continue
-		}
-		g := geom.NewPolygon(geom.XY)
-		tzName := string(sp[0])
-		var props map[string]any
-
-		if spi := sp[1]; len(spi) > 0 {
-			if err := json.Unmarshal(spi, &props); err != nil {
-				panic(err)
-			}
-		}
-		for i := 2; i < len(sp); i++ {
-			spi := sp[i]
-			if len(spi) == 0 {
-				continue
-			}
-			var dec []float64
-			dec, _, err := codec.DecodeFlatCoords(dec, spi)
-			if err != nil {
-				panic(err)
-			}
-			g.Push(geom.NewLinearRingFlat(geom.XY, dec))
-		}
-		features = append(features, &geojson.Feature{
-			ID:         tzName,
-			Properties: props,
-			Geometry:   g,
-		})
-	}
-	return geojson.FeatureCollection{Features: features}, nil
 }
